@@ -4,7 +4,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FriendCodeForum Node</title>
+<meta name="theme-color" content="#090d16">
+<title>FriendCodeForum - Decentralized Network</title>
 
 <style>
 * { box-sizing: border-box; }
@@ -14,11 +15,11 @@ body {
   background: #090d16;
   color: #eef3ff;
   font-family: Arial, sans-serif;
-  padding: 30px 16px;
+  padding: 25px 16px;
 }
 
 main {
-  max-width: 850px;
+  max-width: 900px;
   margin: auto;
 }
 
@@ -31,6 +32,8 @@ header, .card {
 }
 
 h1 { margin-top: 0; }
+h3 { margin-top: 0; }
+
 .muted { color: #91a2bb; }
 
 .grid {
@@ -42,39 +45,92 @@ h1 { margin-top: 0; }
 .stat {
   font-size: 27px;
   font-weight: bold;
+  overflow-wrap: anywhere;
 }
 
 .online { color: #36df9a; }
 .offline { color: #ff6575; }
+.warning { color: #ffcc66; }
 
-button, input {
+button, input, textarea {
   padding: 12px;
   border-radius: 8px;
   border: 1px solid #34455f;
   font-size: 14px;
+  font-family: inherit;
 }
 
 button {
   background: #2869e8;
   color: white;
   cursor: pointer;
+  border: none;
 }
 
-input {
+button:hover { background: #4380f5; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+input, textarea {
   background: #090d16;
   color: white;
   width: 100%;
   margin: 8px 0;
 }
 
-.peer {
+textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.peer, .post {
   border-top: 1px solid #26354c;
-  padding: 12px 0;
+  padding: 14px 0;
   overflow-wrap: anywhere;
+}
+
+.post-content {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  margin: 12px 0;
+}
+
+.post-meta {
+  font-size: 12px;
+  color: #91a2bb;
+}
+
+.badge {
+  display: inline-block;
+  background: #153e35;
+  color: #36df9a;
+  padding: 5px 9px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.network-box {
+  background: #0b1422;
+  border: 1px solid #26354c;
+  border-radius: 9px;
+  padding: 14px;
+  margin-top: 12px;
+}
+
+#message {
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+}
+
+footer {
+  text-align: center;
+  color: #71829c;
+  padding: 20px;
+  font-size: 12px;
 }
 
 @media(max-width: 550px) {
   .grid { grid-template-columns: 1fr; }
+  header, .card { padding: 17px; }
 }
 </style>
 </head>
@@ -83,13 +139,25 @@ input {
 <main>
 
 <header>
-  <h1>FriendCodeForum Node</h1>
-  <p class="muted">Independent JavaScript Network Node</p>
-  <h3 id="status" class="offline">Connecting...</h3>
+  <h1>🌐 FriendCodeForum</h1>
+  <p class="muted">Decentralized Community Network</p>
+
+  <h3 id="status" class="warning">● Connecting...</h3>
+
   <p class="muted" id="nodeId">Node ID: --</p>
+
+  <span class="badge">Independent Network Node</span>
+
+  <div class="network-box">
+    <strong>Network connection</strong>
+    <p class="muted" id="connection">
+      Connecting to FriendCodeForum...
+    </p>
+  </div>
 </header>
 
 <div class="grid">
+
   <section class="card">
     <p class="muted">NODE STATUS</p>
     <div class="stat" id="nodeStatus">--</div>
@@ -101,93 +169,183 @@ input {
   </section>
 
   <section class="card">
-    <p class="muted">REGISTERED PEERS</p>
-    <div class="stat" id="peers">--</div>
+    <p class="muted">CONNECTED PEERS</p>
+    <div class="stat" id="peerCount">--</div>
   </section>
 
   <section class="card">
-    <p class="muted">VERSION</p>
-    <div class="stat" id="version">--</div>
+    <p class="muted">DISTRIBUTED POSTS</p>
+    <div class="stat" id="postCount">--</div>
   </section>
+
 </div>
 
 <section class="card">
-  <h3>Registered Peers</h3>
-  <div id="peerList" class="muted">Loading peers...</div>
+  <h3>🖥️ Node Information</h3>
+
+  <p class="muted">
+    Node version: <strong id="version">--</strong>
+  </p>
+
+  <p class="muted">
+    Network authentication:
+    <strong id="authentication">--</strong>
+  </p>
+
+  <p class="muted">
+    Node address:
+    <span id="nodeAddress">--</span>
+  </p>
+
+  <button onclick="refresh()">Refresh Network</button>
+
+  <p class="muted" id="updated">Not yet updated</p>
 </section>
 
 <section class="card">
-  <h3>Node Information</h3>
+  <h3>🌍 Network Peers</h3>
+
   <p class="muted">
-    This dashboard monitors the server-side node.
-    It does not run a node in the visitor's browser.
+    Other registered FriendCodeForum nodes.
   </p>
-  <button onclick="refresh()">Refresh Node</button>
-  <p class="muted" id="updated">Not yet updated</p>
+
+  <div id="peerList" class="muted">
+    Loading peers...
+  </div>
 </section>
+
+<section class="card">
+  <h3>✍️ Publish a Forum Post</h3>
+
+  <p class="muted">
+    Publish a post to your node. It will be distributed
+    to registered network peers.
+  </p>
+
+  <form id="postForm">
+    <input
+      id="author"
+      type="text"
+      placeholder="Your username"
+      maxlength="100"
+      required
+    >
+
+    <textarea
+      id="content"
+      placeholder="What's happening in the community?"
+      maxlength="5000"
+      required
+    ></textarea>
+
+    <button type="submit" id="publishButton">
+      Publish Post
+    </button>
+  </form>
+
+  <p id="message" class="muted"></p>
+</section>
+
+<section class="card">
+  <h3>💬 Community Forum</h3>
+
+  <p class="muted">
+    Posts stored on this node, including posts received
+    from other network nodes.
+  </p>
+
+  <div id="postList" class="muted">
+    Loading forum posts...
+  </div>
+
+  <button onclick="loadPosts()">Refresh Posts</button>
+</section>
+
+<footer>
+  FriendCodeForum Decentralized Network<br>
+  Independent nodes • Distributed discussions • Open community
+</footer>
 
 </main>
 
 <script>
 const API = "https://friendcodeforum-node.onrender.com";
 
+let refreshing = false;
+
 function formatTime(seconds) {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor(seconds % 86400 / 3600);
   const m = Math.floor(seconds % 3600 / 60);
+
   return `${d}d ${h}h ${m}m`;
 }
 
-async function refresh() {
-  try {
-    const response = await fetch(API + "/api/status", {
-      cache: "no-store"
-    });
-
-    if (!response.ok) throw new Error("API unavailable");
-
-    const data = await response.json();
-
-    document.getElementById("status").textContent = "● ONLINE";
-    document.getElementById("status").className = "online";
-    document.getElementById("nodeStatus").textContent = "Online";
-    document.getElementById("nodeId").textContent =
-      "Node ID: " + data.id;
-    document.getElementById("uptime").textContent =
-      formatTime(data.uptime);
-    document.getElementById("peers").textContent =
-      data.peers;
-    document.getElementById("version").textContent =
-      data.version;
-
-    document.getElementById("updated").textContent =
-      "Last checked: " + new Date().toLocaleTimeString();
-
-    await loadPeers();
-
-  } catch (error) {
-    document.getElementById("status").textContent = "● OFFLINE";
-    document.getElementById("status").className = "offline";
-    document.getElementById("nodeStatus").textContent = "Offline";
-    document.getElementById("updated").textContent =
-      "Connection failed: " + error.message;
-  }
+function element(id) {
+  return document.getElementById(id);
 }
 
-async function loadPeers() {
-  const response = await fetch(API + "/api/peers", {
-    cache: "no-store"
+function showMessage(message, color = "#91a2bb") {
+  element("message").textContent = message;
+  element("message").style.color = color;
+}
+
+async function apiFetch(endpoint, options = {}) {
+  const response = await fetch(API + endpoint, {
+    cache: "no-store",
+    ...options
   });
 
-  if (!response.ok) throw new Error("Could not load peers");
+  if (!response.ok) {
+    throw new Error(`Server returned ${response.status}`);
+  }
 
-  const data = await response.json();
-  const list = document.getElementById("peerList");
+  return response.json();
+}
 
+// Load node information
+async function loadStatus() {
+  const data = await apiFetch("/api/status");
+
+  element("status").textContent = "● ONLINE";
+  element("status").className = "online";
+
+  element("nodeStatus").textContent = "Online";
+  element("nodeStatus").className = "stat online";
+
+  element("nodeId").textContent = "Node ID: " + data.id;
+
+  element("uptime").textContent = formatTime(data.uptime);
+
+  element("peerCount").textContent = data.peers;
+
+  element("postCount").textContent =
+    data.posts ?? "--";
+
+  element("version").textContent = data.version;
+
+  element("authentication").textContent =
+    data.networkAuthenticated ? "Enabled" : "Not configured";
+
+  element("nodeAddress").textContent =
+    data.url || API;
+
+  element("connection").textContent =
+    "Connected to your FriendCodeForum node.";
+
+  element("updated").textContent =
+    "Last checked: " + new Date().toLocaleTimeString();
+}
+
+// Load registered peers
+async function loadPeers() {
+  const data = await apiFetch("/api/peers");
+
+  const list = element("peerList");
   list.replaceChildren();
 
   if (!data.peers.length) {
-    list.textContent = "No registered peers yet.";
+    list.textContent = "No peers registered yet.";
     return;
   }
 
@@ -199,17 +357,158 @@ async function loadPeers() {
     name.textContent = peer.name;
 
     const url = document.createElement("p");
-    url.textContent = peer.url;
     url.className = "muted";
+    url.textContent = peer.url;
 
-    item.append(name, url);
+    const id = document.createElement("small");
+    id.className = "post-meta";
+    id.textContent = "Peer ID: " + peer.id;
+
+    item.append(name, url, id);
     list.appendChild(item);
   });
 }
 
-refresh();
-setInterval(refresh, 15000);
-</script>
+// Load distributed posts
+async function loadPosts() {
+  const list = element("postList");
 
+  try {
+    const data = await apiFetch("/api/posts");
+
+    list.replaceChildren();
+
+    if (!data.posts.length) {
+      list.textContent = "No forum posts yet. Be the first!";
+      element("postCount").textContent = "0";
+      return;
+    }
+
+    element("postCount").textContent = data.count;
+
+    // Show newest posts first
+    [...data.posts].reverse().forEach(post => {
+      const item = document.createElement("article");
+      item.className = "post";
+
+      const author = document.createElement("strong");
+      author.textContent = post.author;
+
+      const date = document.createElement("div");
+      date.className = "post-meta";
+
+      date.textContent =
+        new Date(post.createdAt).toLocaleString();
+
+      const content = document.createElement("div");
+      content.className = "post-content";
+      content.textContent = post.content;
+
+      const origin = document.createElement("div");
+      origin.className = "post-meta";
+      origin.textContent =
+        "Origin node: " + post.originNode;
+
+      item.append(author, date, content, origin);
+      list.appendChild(item);
+    });
+
+  } catch (error) {
+    list.textContent = "Could not load forum posts: " + error.message;
+  }
+}
+
+// Publish a post
+element("postForm").addEventListener("submit", async event => {
+  event.preventDefault();
+
+  const author = element("author").value.trim();
+  const content = element("content").value.trim();
+
+  if (!author || !content) {
+    showMessage("Please enter your username and post.");
+    return;
+  }
+
+  const button = element("publishButton");
+
+  button.disabled = true;
+  button.textContent = "Publishing...";
+
+  try {
+    const result = await apiFetch("/api/posts", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        author,
+        content
+      })
+    });
+
+    if (!result.success) {
+      throw new Error("Post could not be published");
+    }
+
+    element("content").value = "";
+
+    showMessage(
+      "✓ Post published successfully!",
+      "#36df9a"
+    );
+
+    await loadPosts();
+    await loadStatus();
+
+  } catch (error) {
+    showMessage(
+      "Publishing failed: " + error.message,
+      "#ff6575"
+    );
+  } finally {
+    button.disabled = false;
+    button.textContent = "Publish Post";
+  }
+});
+
+// Refresh everything
+async function refresh() {
+  if (refreshing) return;
+
+  refreshing = true;
+
+  try {
+    await loadStatus();
+
+    await Promise.all([
+      loadPeers(),
+      loadPosts()
+    ]);
+
+  } catch (error) {
+    element("status").textContent = "● OFFLINE";
+    element("status").className = "offline";
+
+    element("nodeStatus").textContent = "Offline";
+    element("nodeStatus").className = "stat offline";
+
+    element("connection").textContent =
+      "Could not connect: " + error.message;
+
+    element("updated").textContent =
+      "Connection failed.";
+  } finally {
+    refreshing = false;
+  }
+}
+
+// Initial connection
+refresh();
+
+// Automatic updates every 15 seconds
+setInterval(refresh, 15000);
+
+</script>
 </body>
 </html>
