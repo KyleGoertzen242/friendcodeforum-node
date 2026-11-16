@@ -7,7 +7,7 @@ const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const DATA_DIR = path.join(__dirname, "data");
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
 const PEERS_FILE = path.join(DATA_DIR, "peers.json");
 const POSTS_FILE = path.join(DATA_DIR, "posts.json");
 const NODE_ID_FILE = path.join(DATA_DIR, "node-id");
