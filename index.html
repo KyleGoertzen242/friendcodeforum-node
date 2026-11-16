@@ -1,0 +1,215 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FriendCodeForum Node</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #090d16;
+  color: #eef3ff;
+  font-family: Arial, sans-serif;
+  padding: 30px 16px;
+}
+
+main {
+  max-width: 850px;
+  margin: auto;
+}
+
+header, .card {
+  background: #111a2a;
+  border: 1px solid #26354c;
+  border-radius: 13px;
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+h1 { margin-top: 0; }
+.muted { color: #91a2bb; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.stat {
+  font-size: 27px;
+  font-weight: bold;
+}
+
+.online { color: #36df9a; }
+.offline { color: #ff6575; }
+
+button, input {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #34455f;
+  font-size: 14px;
+}
+
+button {
+  background: #2869e8;
+  color: white;
+  cursor: pointer;
+}
+
+input {
+  background: #090d16;
+  color: white;
+  width: 100%;
+  margin: 8px 0;
+}
+
+.peer {
+  border-top: 1px solid #26354c;
+  padding: 12px 0;
+  overflow-wrap: anywhere;
+}
+
+@media(max-width: 550px) {
+  .grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body>
+<main>
+
+<header>
+  <h1>FriendCodeForum Node</h1>
+  <p class="muted">Independent JavaScript Network Node</p>
+  <h3 id="status" class="offline">Connecting...</h3>
+  <p class="muted" id="nodeId">Node ID: --</p>
+</header>
+
+<div class="grid">
+  <section class="card">
+    <p class="muted">NODE STATUS</p>
+    <div class="stat" id="nodeStatus">--</div>
+  </section>
+
+  <section class="card">
+    <p class="muted">UPTIME</p>
+    <div class="stat" id="uptime">--</div>
+  </section>
+
+  <section class="card">
+    <p class="muted">REGISTERED PEERS</p>
+    <div class="stat" id="peers">--</div>
+  </section>
+
+  <section class="card">
+    <p class="muted">VERSION</p>
+    <div class="stat" id="version">--</div>
+  </section>
+</div>
+
+<section class="card">
+  <h3>Registered Peers</h3>
+  <div id="peerList" class="muted">Loading peers...</div>
+</section>
+
+<section class="card">
+  <h3>Node Information</h3>
+  <p class="muted">
+    This dashboard monitors the server-side node.
+    It does not run a node in the visitor's browser.
+  </p>
+  <button onclick="refresh()">Refresh Node</button>
+  <p class="muted" id="updated">Not yet updated</p>
+</section>
+
+</main>
+
+<script>
+const API = "https://api.friendcodeforum.com";
+
+function formatTime(seconds) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor(seconds % 86400 / 3600);
+  const m = Math.floor(seconds % 3600 / 60);
+  return `${d}d ${h}h ${m}m`;
+}
+
+async function refresh() {
+  try {
+    const response = await fetch(API + "/api/status", {
+      cache: "no-store"
+    });
+
+    if (!response.ok) throw new Error("API unavailable");
+
+    const data = await response.json();
+
+    document.getElementById("status").textContent = "● ONLINE";
+    document.getElementById("status").className = "online";
+    document.getElementById("nodeStatus").textContent = "Online";
+    document.getElementById("nodeId").textContent =
+      "Node ID: " + data.id;
+    document.getElementById("uptime").textContent =
+      formatTime(data.uptime);
+    document.getElementById("peers").textContent =
+      data.peers;
+    document.getElementById("version").textContent =
+      data.version;
+
+    document.getElementById("updated").textContent =
+      "Last checked: " + new Date().toLocaleTimeString();
+
+    await loadPeers();
+
+  } catch (error) {
+    document.getElementById("status").textContent = "● OFFLINE";
+    document.getElementById("status").className = "offline";
+    document.getElementById("nodeStatus").textContent = "Offline";
+    document.getElementById("updated").textContent =
+      "Connection failed: " + error.message;
+  }
+}
+
+async function loadPeers() {
+  const response = await fetch(API + "/api/peers", {
+    cache: "no-store"
+  });
+
+  if (!response.ok) throw new Error("Could not load peers");
+
+  const data = await response.json();
+  const list = document.getElementById("peerList");
+
+  list.replaceChildren();
+
+  if (!data.peers.length) {
+    list.textContent = "No registered peers yet.";
+    return;
+  }
+
+  data.peers.forEach(peer => {
+    const item = document.createElement("div");
+    item.className = "peer";
+
+    const name = document.createElement("strong");
+    name.textContent = peer.name;
+
+    const url = document.createElement("p");
+    url.textContent = peer.url;
+    url.className = "muted";
+
+    item.append(name, url);
+    list.appendChild(item);
+  });
+}
+
+refresh();
+setInterval(refresh, 15000);
+</script>
+
+</body>
+</html>
