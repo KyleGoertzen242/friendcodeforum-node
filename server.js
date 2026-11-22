@@ -7,23 +7,47 @@ const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+// ==========================================
+// CONFIGURATION
+// ==========================================
+
+const DATA_DIR =
+  process.env.DATA_DIR || path.join(__dirname, "data");
+
 const PEERS_FILE = path.join(DATA_DIR, "peers.json");
 const POSTS_FILE = path.join(DATA_DIR, "posts.json");
 const NODE_ID_FILE = path.join(DATA_DIR, "node-id");
 
 const NETWORK_SECRET = process.env.NETWORK_SECRET || "";
-const PUBLIC_URL = (process.env.PUBLIC_URL || "").replace(/\/+$/, "");
+
+const PUBLIC_URL = (
+  process.env.PUBLIC_URL || ""
+).replace(/\/+$/, "");
 
 const MAX_POSTS = 10000;
 const MAX_PEERS = 100;
 const MAX_SYNC_HOPS = 3;
 
+const ALLOWED_ORIGINS = [
+  "https://kylegoertzen242.github.io",
+  "https://www.friendcodeofrum.com",
+  "https://friendcodeofrum.com",
+  "https://www.friendcodeforum.com",
+  "https://friendcodeforum.com"
+];
+
+// ==========================================
+// INITIALIZE STORAGE
+// ==========================================
+
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 function initializeFile(file, initialValue) {
   if (!fs.existsSync(file)) {
-    fs.writeFileSync(file, JSON.stringify(initialValue, null, 2));
+    fs.writeFileSync(
+      file,
+      JSON.stringify(initialValue, null, 2)
+    );
   }
 }
 
@@ -34,17 +58,36 @@ if (!fs.existsSync(NODE_ID_FILE)) {
   fs.writeFileSync(NODE_ID_FILE, crypto.randomUUID());
 }
 
-const NODE_ID = fs.readFileSync(NODE_ID_FILE, "utf8").trim();
+const NODE_ID = fs.readFileSync(
+  NODE_ID_FILE,
+  "utf8"
+).trim();
+
 const startedAt = Date.now();
+
+// ==========================================
+// MIDDLEWARE
+// ==========================================
+
+app.set("trust proxy", 1);
 
 app.use(express.json({ limit: "100kb" }));
 
+// ==========================================
 // CORS
+// ==========================================
+
 app.use((req, res, next) => {
-  res.setHeader(
-    "Access-Control-Allow-Origin",
-    "https://kylegoertzen242.github.io"
-  );
+  const origin = req.headers.origin;
+
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    res.setHeader(
+      "Access-Control-Allow-Origin",
+      origin
+    );
+
+    res.setHeader("Vary", "Origin");
+  }
 
   res.setHeader(
     "Access-Control-Allow-Methods",
@@ -63,16 +106,24 @@ app.use((req, res, next) => {
   next();
 });
 
-// Simple request throttling for public post creation.
+// ==========================================
+// RATE LIMITING
+// ==========================================
+
 const requestCounts = new Map();
 
 function rateLimit(req, res, next) {
   const ip = req.ip;
   const now = Date.now();
+
   const entry = requestCounts.get(ip);
 
   if (!entry || now - entry.time > 60000) {
-    requestCounts.set(ip, { time: now, count: 1 });
+    requestCounts.set(ip, {
+      time: now,
+      count: 1
+    });
+
     return next();
   }
 
@@ -87,7 +138,10 @@ function rateLimit(req, res, next) {
   next();
 }
 
-// Authenticate node-to-node and administrative requests.
+// ==========================================
+// NETWORK AUTHENTICATION
+// ==========================================
+
 function requireNetworkSecret(req, res, next) {
   if (!NETWORK_SECRET) {
     return res.status(503).json({
@@ -95,7 +149,8 @@ function requireNetworkSecret(req, res, next) {
     });
   }
 
-  const supplied = req.get("X-Network-Secret") || "";
+  const supplied =
+    req.get("X-Network-Secret") || "";
 
   const a = Buffer.from(supplied);
   const b = Buffer.from(NETWORK_SECRET);
@@ -112,10 +167,16 @@ function requireNetworkSecret(req, res, next) {
   next();
 }
 
-// Persistent JSON storage.
+// ==========================================
+// JSON STORAGE
+// ==========================================
+
 function readJSON(file, fallback = []) {
   try {
-    const value = JSON.parse(fs.readFileSync(file, "utf8"));
+    const value = JSON.parse(
+      fs.readFileSync(file, "utf8")
+    );
+
     return Array.isArray(value) ? value : fallback;
   } catch {
     return fallback;
@@ -125,7 +186,11 @@ function readJSON(file, fallback = []) {
 function writeJSON(file, value) {
   const temp = file + ".tmp";
 
-  fs.writeFileSync(temp, JSON.stringify(value, null, 2));
+  fs.writeFileSync(
+    temp,
+    JSON.stringify(value, null, 2)
+  );
+
   fs.renameSync(temp, file);
 }
 
@@ -142,17 +207,23 @@ function savePeers(peers) {
 }
 
 function savePosts(posts) {
-  writeJSON(POSTS_FILE, posts.slice(-MAX_POSTS));
+  writeJSON(
+    POSTS_FILE,
+    posts.slice(-MAX_POSTS)
+  );
 }
 
-// Validate post data received from other nodes.
+// ==========================================
+// POST VALIDATION
+// ==========================================
+
 function validPost(post) {
   return (
     post &&
     typeof post.id === "string" &&
     post.id.length <= 100 &&
     typeof post.content === "string" &&
-    post.content.length > 0 &&
+    post.content.trim().length > 0 &&
     post.content.length <= 5000 &&
     typeof post.author === "string" &&
     post.author.length <= 100 &&
@@ -163,10 +234,16 @@ function validPost(post) {
   );
 }
 
-// Find and store posts we haven't received before.
+// ==========================================
+// DUPLICATE PREVENTION
+// ==========================================
+
 function mergePosts(incoming) {
   const existing = getPosts();
-  const ids = new Set(existing.map(post => post.id));
+
+  const ids = new Set(
+    existing.map(post => post.id)
+  );
 
   const added = [];
 
@@ -186,8 +263,15 @@ function mergePosts(incoming) {
   return added;
 }
 
-// Send new posts to registered peers.
-async function broadcastPosts(posts, hops = 0, excludedUrl = null) {
+// ==========================================
+// PEER-TO-PEER DISTRIBUTION
+// ==========================================
+
+async function broadcastPosts(
+  posts,
+  hops = 0,
+  excludedUrl = null
+) {
   if (!NETWORK_SECRET || hops >= MAX_SYNC_HOPS) {
     return;
   }
@@ -203,14 +287,18 @@ async function broadcastPosts(posts, hops = 0, excludedUrl = null) {
             `${peer.url}/api/sync`,
             {
               method: "POST",
+
               headers: {
                 "Content-Type": "application/json",
                 "X-Network-Secret": NETWORK_SECRET
               },
+
               body: JSON.stringify({
                 posts,
-                hops: hops + 1
+                hops: hops + 1,
+                sourceUrl: PUBLIC_URL || null
               }),
+
               signal: AbortSignal.timeout(5000),
               redirect: "manual"
             }
@@ -221,6 +309,7 @@ async function broadcastPosts(posts, hops = 0, excludedUrl = null) {
               `Peer ${peer.name} returned ${response.status}`
             );
           }
+
         } catch (error) {
           console.warn(
             `Could not reach peer ${peer.name}:`,
@@ -231,18 +320,24 @@ async function broadcastPosts(posts, hops = 0, excludedUrl = null) {
   );
 }
 
-// Health check
+// ==========================================
+// HEALTH CHECK
+// ==========================================
+
 app.get("/api/health", (req, res) => {
   res.json({
     status: "online",
-    service: "FriendCodeForum Node",
-    decentralized: true,
+    service: "FriendCodeForum",
     nodeId: NODE_ID,
+    decentralized: true,
     timestamp: new Date().toISOString()
   });
 });
 
-// Node information
+// ==========================================
+// NODE STATUS
+// ==========================================
+
 app.get("/api/status", (req, res) => {
   const peers = getPeers();
   const posts = getPosts();
@@ -252,17 +347,26 @@ app.get("/api/status", (req, res) => {
     id: NODE_ID,
     url: PUBLIC_URL || null,
     status: "online",
-    version: "2.0.0",
+    version: "2.1.0",
     decentralized: true,
-    uptime: Math.floor((Date.now() - startedAt) / 1000),
+
+    uptime: Math.floor(
+      (Date.now() - startedAt) / 1000
+    ),
+
     peers: peers.length,
     posts: posts.length,
+
     networkAuthenticated: Boolean(NETWORK_SECRET),
+
     timestamp: new Date().toISOString()
   });
 });
 
-// List peers
+// ==========================================
+// LIST PEERS
+// ==========================================
+
 app.get("/api/peers", (req, res) => {
   res.json({
     nodeId: NODE_ID,
@@ -270,11 +374,15 @@ app.get("/api/peers", (req, res) => {
   });
 });
 
-// Register a peer
+// ==========================================
+// REGISTER PEER
+// ==========================================
+
 app.post(
   "/api/peers",
   requireNetworkSecret,
   (req, res) => {
+
     const { name, url } = req.body || {};
 
     if (
@@ -324,7 +432,10 @@ app.post(
 
     const peerURL = parsed.origin;
 
-    if (peerURL === PUBLIC_URL || peerURL === `https://${req.get("host")}`) {
+    if (
+      peerURL === PUBLIC_URL ||
+      peerURL === `https://${req.get("host")}`
+    ) {
       return res.status(400).json({
         error: "Cannot register this node as its own peer"
       });
@@ -352,6 +463,7 @@ app.post(
     };
 
     peers.push(peer);
+
     savePeers(peers);
 
     res.status(201).json({
@@ -361,12 +473,17 @@ app.post(
   }
 );
 
-// Remove peer
+// ==========================================
+// REMOVE PEER
+// ==========================================
+
 app.delete(
   "/api/peers/:id",
   requireNetworkSecret,
   (req, res) => {
+
     const peers = getPeers();
+
     const updated = peers.filter(
       peer => peer.id !== req.params.id
     );
@@ -379,11 +496,16 @@ app.delete(
 
     savePeers(updated);
 
-    res.json({ success: true });
+    res.json({
+      success: true
+    });
   }
 );
 
-// Read forum posts
+// ==========================================
+// READ POSTS
+// ==========================================
+
 app.get("/api/posts", (req, res) => {
   const posts = getPosts();
 
@@ -391,7 +513,10 @@ app.get("/api/posts", (req, res) => {
     ? Date.parse(req.query.since)
     : 0;
 
-  if (req.query.since && !Number.isFinite(since)) {
+  if (
+    req.query.since &&
+    !Number.isFinite(since)
+  ) {
     return res.status(400).json({
       error: "Invalid since timestamp"
     });
@@ -400,56 +525,74 @@ app.get("/api/posts", (req, res) => {
   res.json({
     nodeId: NODE_ID,
     count: posts.length,
+
     posts: posts.filter(
       post => Date.parse(post.createdAt) > since
     )
   });
 });
 
-// Publish a post
-app.post("/api/posts", rateLimit, async (req, res) => {
-  const { author, content } = req.body || {};
+// ==========================================
+// CREATE POST
+// ==========================================
 
-  if (
-    typeof author !== "string" ||
-    author.trim().length < 1 ||
-    author.length > 100 ||
-    typeof content !== "string" ||
-    content.trim().length < 1 ||
-    content.length > 5000
-  ) {
-    return res.status(400).json({
-      error: "Valid author and post content required"
+app.post(
+  "/api/posts",
+  rateLimit,
+  async (req, res) => {
+
+    const { author, content } = req.body || {};
+
+    if (
+      typeof author !== "string" ||
+      author.trim().length < 1 ||
+      author.length > 100 ||
+      typeof content !== "string" ||
+      content.trim().length < 1 ||
+      content.length > 5000
+    ) {
+      return res.status(400).json({
+        error: "Valid author and post content required"
+      });
+    }
+
+    const post = {
+      id: crypto.randomUUID(),
+      author: author.trim(),
+      content: content.trim(),
+      originNode: NODE_ID,
+      createdAt: new Date().toISOString()
+    };
+
+    const posts = getPosts();
+
+    posts.push(post);
+
+    savePosts(posts);
+
+    broadcastPosts([post]).catch(console.error);
+
+    res.status(201).json({
+      success: true,
+      post
     });
   }
+);
 
-  const post = {
-    id: crypto.randomUUID(),
-    author: author.trim(),
-    content: content.trim(),
-    originNode: NODE_ID,
-    createdAt: new Date().toISOString()
-  };
+// ==========================================
+// RECEIVE SYNCHRONIZED POSTS
+// ==========================================
 
-  const posts = getPosts();
-  posts.push(post);
-  savePosts(posts);
-
-  // Distribute the post to the network.
-  broadcastPosts([post]).catch(console.error);
-
-  res.status(201).json({
-    success: true,
-    post
-  });
-});
-
-// Receive posts from other nodes.
 app.post(
   "/api/sync",
   requireNetworkSecret,
   async (req, res) => {
-    const { posts, hops = 0 } = req.body || {};
+
+    const {
+      posts,
+      hops = 0,
+      sourceUrl = null
+    } = req.body || {};
 
     if (
       !Array.isArray(posts) ||
@@ -471,12 +614,11 @@ app.post(
 
     const added = mergePosts(posts);
 
-    // Continue spreading newly received posts.
     if (added.length && hops < MAX_SYNC_HOPS) {
       broadcastPosts(
         added,
         hops,
-        req.body.sourceUrl || null
+        sourceUrl
       ).catch(console.error);
     }
 
@@ -489,15 +631,42 @@ app.post(
   }
 );
 
-// Start node
+// ==========================================
+// ERROR HANDLING
+// ==========================================
+
+app.use((err, req, res, next) => {
+  console.error("Server error:", err.message);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  res.status(500).json({
+    error: "Internal server error"
+  });
+});
+
+// ==========================================
+// START SERVER
+// ==========================================
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log("--------------------------------");
-  console.log(" FriendCodeForum Node 2.0");
+  console.log(" FriendCodeForum Node 2.1");
   console.log("--------------------------------");
+
   console.log("Node ID:", NODE_ID);
   console.log("Port:", PORT);
-  console.log("Network authentication:", NETWORK_SECRET ? "Enabled" : "Not configured");
+  console.log("Public URL:", PUBLIC_URL || "Not configured");
+
+  console.log(
+    "Network authentication:",
+    NETWORK_SECRET ? "Enabled" : "Not configured"
+  );
+
   console.log("Peers:", getPeers().length);
   console.log("Posts:", getPosts().length);
+
   console.log("--------------------------------");
 });
