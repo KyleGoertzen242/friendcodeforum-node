@@ -30,8 +30,8 @@ const MAX_SYNC_HOPS = 3;
 
 const ALLOWED_ORIGINS = [
   "https://kylegoertzen242.github.io",
-  "https://www.friendcodeofrum.com",
-  "https://friendcodeofrum.com",
+  "https://www.friendcodeforum.com",
+  "https://friendcodeforum.com",
   "https://www.friendcodeforum.com",
   "https://friendcodeforum.com"
 ];
